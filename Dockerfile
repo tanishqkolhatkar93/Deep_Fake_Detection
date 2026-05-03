@@ -22,22 +22,6 @@ RUN python -m pip install --upgrade pip && python -m pip install -r requirements
 
 COPY . .
 
-RUN python - <<'PY'
-from pathlib import Path
-import shutil
-from huggingface_hub import hf_hub_download
-
-downloaded = hf_hub_download(
-    repo_id="xRayon/convnext-ai-images-detector",
-    filename="AI Images Detector/checkpoints/checkpoint_phase2.pth",
-)
-target = Path("/app/checkpoints/checkpoint_phase2.pth")
-target.parent.mkdir(parents=True, exist_ok=True)
-if not target.exists():
-    shutil.copyfile(downloaded, target)
-print(target)
-PY
-
 EXPOSE 7860
 
 CMD ["python", "-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "7860"]
