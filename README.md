@@ -46,7 +46,7 @@ This is a strong public demo baseline, not a claim of forensic certainty.
 
 ## Architecture
 
-- `site/`: static marketing and scanner website, deployed via GitHub Pages
+- `web/`: Next.js + TypeScript + Tailwind + shadcn-compatible frontend, deployed via GitHub Pages
 - `api.py`: FastAPI application for public inference
 - `app.py`: Streamlit local/admin demo surface
 - `src/deepfake_detector/`: model loading, video sampling, security validation, report types
@@ -86,6 +86,13 @@ Install dependencies:
 python -m pip install -r requirements.txt
 ```
 
+Install frontend dependencies:
+
+```powershell
+cd web
+npm ci
+```
+
 Run the public API locally:
 
 ```powershell
@@ -102,6 +109,14 @@ Run tests:
 
 ```powershell
 pytest
+```
+
+Run frontend validation:
+
+```powershell
+cd web
+npm run lint
+npm run build
 ```
 
 ## Environment variables
