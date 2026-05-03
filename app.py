@@ -14,6 +14,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from deepfake_detector.image_detector import ImageDetector
+from deepfake_detector.security import UploadLimits, validate_upload_metadata, validate_video_file
 from deepfake_detector.video_detector import VideoDetector
 
 
@@ -28,6 +29,13 @@ st.caption("Local xRayon detector for binary Yes/No checks on images and videos.
 
 detector = ImageDetector()
 video_detector = VideoDetector(image_detector=detector)
+upload_limits = UploadLimits()
+
+st.caption(
+    f"Upload limits: images up to {upload_limits.max_image_bytes // (1024 * 1024)} MB, "
+    f"videos up to {upload_limits.max_video_bytes // (1024 * 1024)} MB and "
+    f"{int(upload_limits.max_video_duration_seconds)} seconds."
+)
 
 
 def _evidence_table(evidence: dict[str, float]) -> pd.DataFrame:
@@ -42,12 +50,19 @@ with tab1:
         "Upload an image", type=["png", "jpg", "jpeg", "webp"], key="image"
     )
     if image_file is not None:
-        image = Image.open(image_file).convert("RGB")
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            st.image(image, use_container_width=True)
-
         try:
+            payload = image_file.getvalue()
+            validate_upload_metadata(
+                filename=image_file.name,
+                content_type=image_file.type,
+                payload=payload,
+                media_type="image",
+                limits=upload_limits,
+            )
+            image = Image.open(image_file).convert("RGB")
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                st.image(image, use_container_width=True)
             report = detector.detect_pil(image)
         except Exception as exc:
             st.error(str(exc))
@@ -69,12 +84,21 @@ with tab2:
         suffix = Path(video_file.name).suffix or ".mp4"
         temp_dir = ROOT / ".tmp"
         temp_dir.mkdir(exist_ok=True)
-        st.video(video_file.getvalue())
 
         try:
+            payload = video_file.getvalue()
+            validate_upload_metadata(
+                filename=video_file.name,
+                content_type=video_file.type,
+                payload=payload,
+                media_type="video",
+                limits=upload_limits,
+            )
+            st.video(payload)
             with NamedTemporaryFile(delete=False, suffix=suffix, dir=temp_dir) as tmp:
-                tmp.write(video_file.getbuffer())
+                tmp.write(payload)
                 temp_path = Path(tmp.name)
+            validate_video_file(temp_path, limits=upload_limits)
             report = video_detector.detect_file(temp_path)
         except Exception as exc:
             st.error(str(exc))

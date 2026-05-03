@@ -46,6 +46,11 @@ This is a showcase detector, not a production-grade classifier.
 - The checkpoint is much larger than the earlier CapCheck model.
 - Video detection is frame-based, so it can miss short manipulations.
 - Accuracy depends on the chosen model and threshold.
+- Upload validation is enforced:
+  - images up to 10 MB
+  - videos up to 60 MB
+  - videos up to 30 seconds
+- The FastAPI endpoints also apply a basic in-memory rate limit by client IP.
 
 ## Environment
 

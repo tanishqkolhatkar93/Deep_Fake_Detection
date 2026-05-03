@@ -5,7 +5,7 @@ from io import BytesIO
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from PIL import Image, UnidentifiedImageError
 
 ROOT = Path(__file__).resolve().parent
@@ -14,11 +14,14 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from deepfake_detector.image_detector import ImageDetector
+from deepfake_detector.security import (
+    InMemoryRateLimiter,
+    UploadLimits,
+    normalize_suffix,
+    validate_upload_metadata,
+    validate_video_file,
+)
 from deepfake_detector.video_detector import VideoDetector
-
-
-IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
-VIDEO_SUFFIXES = {".mp4", ".mov", ".avi", ".mkv"}
 
 app = FastAPI(
     title="Media Authenticity Detector API",
@@ -31,6 +34,8 @@ app = FastAPI(
 
 image_detector = ImageDetector()
 video_detector = VideoDetector(image_detector=image_detector)
+upload_limits = UploadLimits()
+rate_limiter = InMemoryRateLimiter()
 
 
 @app.get("/")
@@ -48,17 +53,19 @@ def health() -> dict[str, str]:
 
 
 @app.post("/detect/image")
-async def detect_image(file: UploadFile = File(...)) -> dict[str, object]:
-    suffix = _normalized_suffix(file.filename)
-    if suffix not in IMAGE_SUFFIXES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported image type: {suffix or 'unknown'}",
-        )
-
+async def detect_image(request: Request, file: UploadFile = File(...)) -> dict[str, object]:
+    _check_rate_limit(request)
     payload = await file.read()
-    if not payload:
-        raise HTTPException(status_code=400, detail="Empty upload")
+    try:
+        validate_upload_metadata(
+            filename=file.filename,
+            content_type=file.content_type,
+            payload=payload,
+            media_type="image",
+            limits=upload_limits,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
         image = Image.open(BytesIO(payload)).convert("RGB")
@@ -78,25 +85,32 @@ async def detect_image(file: UploadFile = File(...)) -> dict[str, object]:
 
 
 @app.post("/detect/video")
-async def detect_video(file: UploadFile = File(...)) -> dict[str, object]:
-    suffix = _normalized_suffix(file.filename)
-    if suffix not in VIDEO_SUFFIXES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported video type: {suffix or 'unknown'}",
-        )
-
+async def detect_video(request: Request, file: UploadFile = File(...)) -> dict[str, object]:
+    _check_rate_limit(request)
     payload = await file.read()
-    if not payload:
-        raise HTTPException(status_code=400, detail="Empty upload")
+    try:
+        validate_upload_metadata(
+            filename=file.filename,
+            content_type=file.content_type,
+            payload=payload,
+            media_type="video",
+            limits=upload_limits,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     temp_dir = ROOT / ".tmp"
     temp_dir.mkdir(exist_ok=True)
-    with NamedTemporaryFile(delete=False, suffix=suffix, dir=temp_dir) as tmp:
+    with NamedTemporaryFile(
+        delete=False,
+        suffix=normalize_suffix(file.filename) or ".mp4",
+        dir=temp_dir,
+    ) as tmp:
         tmp.write(payload)
         temp_path = Path(tmp.name)
 
     try:
+        validate_video_file(temp_path, limits=upload_limits)
         report = video_detector.detect_file(temp_path)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -112,7 +126,14 @@ async def detect_video(file: UploadFile = File(...)) -> dict[str, object]:
     }
 
 
-def _normalized_suffix(filename: str | None) -> str:
-    if not filename:
-        return ""
-    return Path(filename).suffix.lower()
+def _check_rate_limit(request: Request) -> None:
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    client_ip = forwarded_for.split(",")[0].strip() if forwarded_for else ""
+    if not client_ip and request.client is not None:
+        client_ip = request.client.host
+    if not client_ip:
+        client_ip = "unknown"
+    try:
+        rate_limiter.check(client_ip)
+    except ValueError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
