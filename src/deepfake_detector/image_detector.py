@@ -7,6 +7,7 @@ from typing import Any
 import cv2
 import numpy as np
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 from transformers import (
     AutoConfig,
@@ -108,19 +109,14 @@ class ImageDetector:
                 "Run: python -m pip install timm torchvision"
             ) from exc
 
-        if not self.xrayon_checkpoint_path.exists():
-            raise RuntimeError(
-                "xRayon checkpoint not found. Download 'checkpoint_phase2.pth' from "
-                "https://huggingface.co/xRayon/convnext-ai-images-detector and place it at "
-                f"'{self.xrayon_checkpoint_path}'."
-            )
+        checkpoint_path = self._resolve_xrayon_checkpoint()
 
         model = timm.create_model(
             "convnextv2_base.fcmae_ft_in1k",
             pretrained=False,
             num_classes=2,
         )
-        checkpoint = torch.load(self.xrayon_checkpoint_path, map_location=self.device)
+        checkpoint = torch.load(checkpoint_path, map_location=self.device)
         state_dict = checkpoint.get("model", checkpoint)
         state_dict = {
             key.removeprefix("module."): value
@@ -150,6 +146,24 @@ class ImageDetector:
             # include optimizer or EMA-related extras outside the model state.
             pass
         return transform, model
+
+    def _resolve_xrayon_checkpoint(self) -> Path:
+        if self.xrayon_checkpoint_path.exists():
+            return self.xrayon_checkpoint_path
+
+        try:
+            downloaded_path = hf_hub_download(
+                repo_id="xRayon/convnext-ai-images-detector",
+                filename="AI Images Detector/checkpoints/checkpoint_phase2.pth",
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                "xRayon checkpoint not found locally and automatic download failed. "
+                "Ensure internet access is available or set XRAYON_CHECKPOINT_PATH to a valid "
+                "checkpoint_phase2.pth file."
+            ) from exc
+
+        return Path(downloaded_path)
 
     def _load_by_model_type(self, model_type: str) -> tuple[Any, Any]:
         if model_type == "vit":

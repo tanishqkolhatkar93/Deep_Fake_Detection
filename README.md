@@ -1,3 +1,21 @@
+---
+title: Deepfake and AI-Generated Media Detector
+colorFrom: blue
+colorTo: gray
+sdk: docker
+app_port: 8501
+pinned: false
+license: mit
+short_description: Detect AI-generated and deepfake images/videos with xRayon.
+tags:
+  - computer-vision
+  - deepfake-detection
+  - streamlit
+  - fastapi
+models:
+  - xRayon/convnext-ai-images-detector
+---
+
 # Deepfake and AI-Generated Media Detector
 
 [![CI](https://github.com/tanishqkolhatkar93/Deep_Fake_Detection/actions/workflows/ci.yml/badge.svg)](https://github.com/tanishqkolhatkar93/Deep_Fake_Detection/actions/workflows/ci.yml)
@@ -11,7 +29,7 @@ It uses a local stronger checkpoint-based model:
 
 - `xRayon/convnext-ai-images-detector`
 
-This model is not a plain `transformers.from_pretrained()` package. You need to download its checkpoint file once and keep it in this project.
+This Space is configured as a Docker app for Hugging Face Spaces. The xRayon checkpoint is downloaded automatically from Hugging Face during build or first run.
 
 ## What it does
 
@@ -24,8 +42,7 @@ This model is not a plain `transformers.from_pretrained()` package. You need to 
 
 This is a showcase detector, not a production-grade classifier.
 
-- You must download `checkpoint_phase2.pth` manually from the xRayon model page.
-- It also requires `timm` and `torchvision`.
+- It requires `timm` and `torchvision`.
 - The checkpoint is much larger than the earlier CapCheck model.
 - Video detection is frame-based, so it can miss short manipulations.
 - Accuracy depends on the chosen model and threshold.
@@ -38,7 +55,6 @@ Optional settings:
 $env:HF_MODEL_ID="xRayon/convnext-ai-images-detector"
 $env:HF_FAKE_THRESHOLD="0.35"
 $env:HF_FAKE_LABEL="fake"
-$env:XRAYON_CHECKPOINT_PATH="C:\Users\tanuu\Downloads\Deep_Fake_Detection\checkpoints\checkpoint_phase2.pth"
 ```
 
 ## Run
@@ -48,13 +64,9 @@ python -m pip install -r requirements.txt
 python -m streamlit run app.py
 ```
 
-Before running, place the xRayon checkpoint here:
+The checkpoint will be downloaded automatically if it is not already present locally.
 
-```text
-checkpoints/checkpoint_phase2.pth
-```
-
-Source:
+Source model:
 
 - https://huggingface.co/xRayon/convnext-ai-images-detector
 
