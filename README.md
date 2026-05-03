@@ -39,6 +39,8 @@ VeriLens currently supports:
 - image detection with a local xRayon checkpoint
 - short video detection by frame sampling and aggregation
 - binary `Yes/No` verdicts with fake probability
+- Google sign-in backed by server-side session tokens
+- per-user monthly free-tier tracking for `10 images` and `3 videos`
 - browser uploads through the public website
 - public API access through FastAPI
 
@@ -58,6 +60,7 @@ Deployment shape:
 2. Hugging Face Spaces serves the FastAPI inference API
 3. The website posts uploads cross-origin to the API
 4. CORS, upload caps, duration caps, and rate limiting protect the demo runtime
+5. Google ID tokens are exchanged for local sessions, and monthly usage is tracked in SQLite
 
 ## Security guardrails
 
@@ -129,7 +132,28 @@ $env:HF_FAKE_THRESHOLD="0.35"
 $env:HF_FAKE_LABEL="fake"
 $env:FRONTEND_URL="https://tanishqkolhatkar93.github.io/Deep_Fake_Detection/"
 $env:ALLOWED_ORIGINS="https://tanishqkolhatkar93.github.io,https://tanishq93-deepfake-detection.hf.space"
+$env:GOOGLE_CLIENT_ID="your-google-oauth-client-id.apps.googleusercontent.com"
+$env:VERILENS_DB_PATH="data/verilens.db"
+$env:FREE_TIER_IMAGE_LIMIT="10"
+$env:FREE_TIER_VIDEO_LIMIT="3"
+$env:SESSION_TTL_DAYS="30"
 ```
+
+Google sign-in setup:
+
+1. Create a Google OAuth Web application in Google Cloud Console
+2. Add these JavaScript origins:
+   - `http://localhost:3000`
+   - `https://tanishqkolhatkar93.github.io`
+3. Set the backend `GOOGLE_CLIENT_ID` env var on your FastAPI deployment
+4. Restart the API so `/auth/config` exposes the client ID to the website
+
+Usage tracking notes:
+
+- successful scans consume quota after the detector completes
+- monthly counters are stored in SQLite at `VERILENS_DB_PATH`
+- free-tier defaults are `10` images and `3` videos per user per month
+- for real production, move this state to PostgreSQL or another managed database
 
 ## Free hosting rationale
 

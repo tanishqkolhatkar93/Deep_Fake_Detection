@@ -1,5 +1,6 @@
 import { ArrowRight, Radar, ShieldCheck, Sparkles, Workflow } from "lucide-react";
 
+import { AccountPanel } from "@/components/auth/account-panel";
 import { Demo } from "@/components/demo";
 import { MediaScanner } from "@/components/sections/media-scanner";
 
@@ -37,40 +38,46 @@ export default function Home() {
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:72px_72px] opacity-35" />
 
       <div className="relative mx-auto flex w-full max-w-7xl flex-col px-5 pb-24 pt-6 md:px-8 lg:px-10">
-        <header className="mb-12 flex flex-col gap-4 rounded-full border border-white/10 bg-white/5 px-5 py-4 backdrop-blur-xl md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-400 to-fuchsia-500 text-sm font-semibold text-white shadow-[0_20px_50px_rgba(245,118,59,0.3)]">
-              VL
+        <header className="mb-12 grid gap-4 rounded-[2rem] border border-white/10 bg-white/5 px-5 py-5 backdrop-blur-xl lg:grid-cols-[1fr_auto] lg:items-center">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-400 to-fuchsia-500 text-sm font-semibold text-white shadow-[0_20px_50px_rgba(245,118,59,0.3)]">
+                VL
+              </div>
+              <div>
+                <p className="text-sm font-semibold tracking-[0.24em] text-white/55 uppercase">
+                  VeriLens
+                </p>
+                <p className="text-sm text-white/60">
+                  AI image and deepfake video authenticity workflow
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-semibold tracking-[0.24em] text-white/55 uppercase">
-                VeriLens
-              </p>
-              <p className="text-sm text-white/60">
-                AI image and deepfake video authenticity workflow
-              </p>
-            </div>
+
+            <nav className="flex flex-wrap items-center gap-3 text-sm text-white/65">
+              <a className="transition hover:text-white" href="#scanner">
+                Scanner
+              </a>
+              <a className="transition hover:text-white" href="#architecture">
+                Architecture
+              </a>
+              <a className="transition hover:text-white" href="#trust">
+                Trust posture
+              </a>
+              <a
+                className="transition hover:text-white"
+                href="https://tanishq93-deepfake-detection.hf.space/docs"
+                target="_blank"
+                rel="noreferrer"
+              >
+                API docs
+              </a>
+            </nav>
           </div>
 
-          <nav className="flex flex-wrap items-center gap-3 text-sm text-white/65">
-            <a className="transition hover:text-white" href="#scanner">
-              Scanner
-            </a>
-            <a className="transition hover:text-white" href="#architecture">
-              Architecture
-            </a>
-            <a className="transition hover:text-white" href="#trust">
-              Trust posture
-            </a>
-            <a
-              className="transition hover:text-white"
-              href="https://tanishq93-deepfake-detection.hf.space/docs"
-              target="_blank"
-              rel="noreferrer"
-            >
-              API docs
-            </a>
-          </nav>
+          <div className="lg:w-[25rem]">
+            <AccountPanel />
+          </div>
         </header>
 
         <section className="grid gap-10 py-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">

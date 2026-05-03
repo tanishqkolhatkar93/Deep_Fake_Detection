@@ -1,14 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Clock3,
+  Film,
+  ImageUp,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
 
-import { AlertCircle, CheckCircle2, Clock3, Film, ImageUp, Loader2, Sparkles } from "lucide-react";
-
+import { useAuth } from "@/components/auth/auth-provider";
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ?? "https://tanishq93-deepfake-detection.hf.space";
 
 type Mode = "image" | "video";
 
@@ -24,6 +30,16 @@ interface MetadataResponse {
   };
 }
 
+interface DetectionUsage {
+  period: string;
+  images_used: number;
+  videos_used: number;
+  image_limit: number;
+  video_limit: number;
+  image_remaining: number;
+  video_remaining: number;
+}
+
 interface DetectionResponse {
   request_id: string;
   processing_ms: number;
@@ -36,9 +52,20 @@ interface DetectionResponse {
     evidence: Record<string, number>;
     frames_sampled?: number;
   };
+  usage?: DetectionUsage;
 }
 
 export function MediaScanner() {
+  const {
+    apiBase,
+    authError,
+    config,
+    isAuthenticated,
+    sessionToken,
+    updateUsage,
+    usage,
+    user,
+  } = useAuth();
   const [mode, setMode] = useState<Mode>("image");
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +75,8 @@ export function MediaScanner() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`${API_BASE}/metadata`)
+
+    fetch(`${apiBase}/metadata`)
       .then((response) => response.json())
       .then((payload: MetadataResponse) => {
         if (!cancelled) {
@@ -64,11 +92,11 @@ export function MediaScanner() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [apiBase]);
 
   const limitText = useMemo(() => {
     if (!metadata) {
-      return "Loading live limits…";
+      return "Loading live limits...";
     }
 
     return mode === "image"
@@ -81,6 +109,11 @@ export function MediaScanner() {
     : [];
 
   const handleSubmit = async () => {
+    if (!isAuthenticated || !sessionToken) {
+      setError("Sign in with Google to start scanning and track your free-tier usage.");
+      return;
+    }
+
     if (!file) {
       setError("Choose a file before starting the scan.");
       return;
@@ -95,8 +128,11 @@ export function MediaScanner() {
     startTransition(async () => {
       try {
         const endpoint = mode === "image" ? "detect/image" : "detect/video";
-        const response = await fetch(`${API_BASE}/${endpoint}`, {
+        const response = await fetch(`${apiBase}/${endpoint}`, {
           method: "POST",
+          headers: {
+            Authorization: `Bearer ${sessionToken}`,
+          },
           body: formData,
         });
         const payload = (await response.json()) as DetectionResponse | { detail?: string };
@@ -109,7 +145,11 @@ export function MediaScanner() {
           );
         }
 
-        setResult(payload as DetectionResponse);
+        const detectionPayload = payload as DetectionResponse;
+        setResult(detectionPayload);
+        if (detectionPayload.usage) {
+          updateUsage(detectionPayload.usage);
+        }
       } catch (submissionError) {
         setError(
           submissionError instanceof Error
@@ -166,13 +206,32 @@ export function MediaScanner() {
           <div className="space-y-2">
             <p className="text-sm uppercase tracking-[0.22em] text-white/45">Live upload</p>
             <h3 className="text-2xl font-semibold text-white">
-              {mode === "image" ? "Check an image for synthetic artifacts" : "Check a short clip for manipulation risk"}
+              {mode === "image"
+                ? "Check an image for synthetic artifacts"
+                : "Check a short clip for manipulation risk"}
             </h3>
             <p className="max-w-2xl text-sm leading-6 text-white/62">{limitText}</p>
+            {usage ? (
+              <div className="flex flex-wrap items-center gap-3 pt-2 text-sm text-white/70">
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
+                  Images left:{" "}
+                  <span className="font-medium text-white">{usage.image_remaining}</span>
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
+                  Videos left:{" "}
+                  <span className="font-medium text-white">{usage.video_remaining}</span>
+                </span>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/60">
+                Free tier starts at {config?.free_image_limit ?? 10} image scans and{" "}
+                {config?.free_video_limit ?? 3} short video scans each month.
+              </div>
+            )}
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white/60">
-            Model: <span className="font-medium text-white">{metadata?.model.name ?? "Loading…"}</span>
+            Model: <span className="font-medium text-white">{metadata?.model.name ?? "Loading..."}</span>
           </div>
         </div>
 
@@ -205,19 +264,41 @@ export function MediaScanner() {
           </label>
 
           <div className="flex flex-col gap-3">
+            {!isAuthenticated ? (
+              <div className="rounded-[1.4rem] border border-white/10 bg-white/[0.04] p-4 text-sm text-white/68">
+                <p className="font-medium text-white">Sign in before you run your first scan.</p>
+                <p className="mt-2 leading-6">
+                  Usage is tracked per account so the monthly free tier stays fair for every
+                  client.
+                </p>
+                <div className="mt-4">
+                  <GoogleSignInButton />
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-[1.4rem] border border-white/10 bg-white/[0.04] p-4 text-sm text-white/68">
+                <p className="font-medium text-white">
+                  Signed in as {user?.name || user?.email}
+                </p>
+                <p className="mt-2 leading-6">
+                  Each successful scan updates your monthly quota immediately.
+                </p>
+              </div>
+            )}
+
             <Button
               type="button"
               size="lg"
               onClick={handleSubmit}
-              disabled={!file || isPending}
+              disabled={!file || isPending || !isAuthenticated}
               className="rounded-2xl bg-white px-5 text-[#07101f] hover:bg-white/90"
             >
               {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-              {isPending ? "Analyzing…" : "Run detector"}
+              {isPending ? "Analyzing..." : "Run detector"}
             </Button>
             <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm leading-6 text-white/60">
-              The browser submits directly to the public API. The UI stays transparent about
-              limits, timing, and model source.
+              The browser submits directly to the public API with your session token. Quotas,
+              timings, and model details stay visible in the UI.
             </div>
           </div>
         </div>
@@ -226,6 +307,12 @@ export function MediaScanner() {
           <div className="mt-5 flex items-start gap-3 rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-100">
             <AlertCircle className="mt-0.5 size-4 shrink-0" />
             <span>{error}</span>
+          </div>
+        ) : null}
+        {!error && authError ? (
+          <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-50">
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            <span>{authError}</span>
           </div>
         ) : null}
 
@@ -241,11 +328,15 @@ export function MediaScanner() {
                     ) : (
                       <CheckCircle2 className="size-5 text-emerald-300" />
                     )}
-                    <span className="text-3xl font-semibold text-white">{result.report.verdict}</span>
+                    <span className="text-3xl font-semibold text-white">
+                      {result.report.verdict}
+                    </span>
                   </div>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-[#0a1020] px-4 py-3 text-right">
-                  <p className="text-xs uppercase tracking-[0.22em] text-white/38">Fake probability</p>
+                  <p className="text-xs uppercase tracking-[0.22em] text-white/38">
+                    Fake probability
+                  </p>
                   <p className="mt-2 text-2xl font-semibold text-white">
                     {(result.report.fake_probability * 100).toFixed(1)}%
                   </p>
@@ -266,6 +357,17 @@ export function MediaScanner() {
                     {result.processing_ms.toFixed(0)} ms
                   </p>
                 </div>
+                {usage ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:col-span-2">
+                    <p className="text-xs uppercase tracking-[0.22em] text-white/38">
+                      Quota tracking
+                    </p>
+                    <p className="mt-2 text-sm text-white/78">
+                      {usage.images_used}/{usage.image_limit} image scans used,{" "}
+                      {usage.videos_used}/{usage.video_limit} video scans used in {usage.period}.
+                    </p>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -286,7 +388,9 @@ export function MediaScanner() {
               {result.report.frames_sampled ? (
                 <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/68">
                   Frames sampled:{" "}
-                  <span className="font-semibold text-white">{result.report.frames_sampled}</span>
+                  <span className="font-semibold text-white">
+                    {result.report.frames_sampled}
+                  </span>
                 </div>
               ) : null}
             </div>

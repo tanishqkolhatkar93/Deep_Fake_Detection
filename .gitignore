@@ -13,3 +13,4 @@ env/
 checkpoints/*.pth
 ~$*.docx
 tools/
+data/*.db

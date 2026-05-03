@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Instrument_Serif, Space_Grotesk } from "next/font/google";
+import Script from "next/script";
+
+import { AuthProvider } from "@/components/auth/auth-provider";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -61,7 +64,10 @@ export default function RootLayout({
       lang="en"
       className={`${spaceGrotesk.variable} ${instrumentSerif.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" />
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

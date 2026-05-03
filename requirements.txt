@@ -4,6 +4,7 @@ opencv-python
 Pillow
 streamlit
 fastapi
+google-auth
 huggingface-hub
 httpx
 python-multipart

@@ -8,9 +8,10 @@ from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import Annotated
 from uuid import uuid4
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
@@ -20,6 +21,8 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from deepfake_detector.auth_store import AuthStore, UsageSnapshot, UserProfile
+from deepfake_detector.google_auth import google_auth_enabled, verify_google_id_token
 from deepfake_detector.image_detector import ImageDetector
 from deepfake_detector.security import (
     InMemoryRateLimiter,
@@ -103,6 +106,64 @@ class DetectionEnvelope(BaseModel):
     media_type: str
     model: str
     report: dict[str, object]
+    usage: dict[str, int | str] | None = None
+
+
+class AuthConfigResponse(BaseModel):
+    enabled: bool
+    google_client_id: str | None
+    free_image_limit: int
+    free_video_limit: int
+
+
+class GoogleAuthRequest(BaseModel):
+    id_token: str
+
+
+class UserResponse(BaseModel):
+    email: str
+    name: str
+    picture_url: str
+    plan_name: str
+
+
+class AuthSessionResponse(BaseModel):
+    session_token: str
+    user: UserResponse
+    usage: dict[str, int | str]
+
+
+class MeResponse(BaseModel):
+    user: UserResponse
+    usage: dict[str, int | str]
+
+
+def _extract_bearer_token(authorization: str | None) -> str:
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        raise HTTPException(status_code=401, detail="Invalid authorization header.")
+    return token.strip()
+
+
+def _serialize_user(user: UserProfile) -> UserResponse:
+    return {
+        "email": user.email,
+        "name": user.name,
+        "picture_url": user.picture_url,
+        "plan_name": user.plan_name,
+    }
+
+
+def _require_user(
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+) -> UserProfile:
+    token = _extract_bearer_token(authorization)
+    try:
+        return auth_store.get_session_user(token)
+    except KeyError as exc:
+        raise HTTPException(status_code=401, detail="Session expired or invalid.") from exc
 
 
 app = FastAPI(
@@ -127,6 +188,7 @@ image_detector = ImageDetector()
 video_detector = VideoDetector(image_detector=image_detector)
 upload_limits = UploadLimits()
 rate_limiter = InMemoryRateLimiter()
+auth_store = AuthStore()
 
 
 @app.middleware("http")
@@ -156,7 +218,16 @@ def root() -> ServiceInfoResponse:
         "frontend_url": FRONTEND_URL,
         "docs": "/docs",
         "openapi": "/openapi.json",
-        "endpoints": ["/health", "/version", "/metadata", "/detect/image", "/detect/video"],
+        "endpoints": [
+            "/health",
+            "/version",
+            "/metadata",
+            "/auth/config",
+            "/auth/google",
+            "/me",
+            "/detect/image",
+            "/detect/video",
+        ],
     }
 
 
@@ -192,10 +263,70 @@ def metadata() -> MetadataResponse:
     }
 
 
+@app.get("/auth/config", response_model=AuthConfigResponse)
+def auth_config() -> AuthConfigResponse:
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+    return {
+        "enabled": google_auth_enabled(),
+        "google_client_id": client_id or None,
+        "free_image_limit": auth_store.free_image_limit,
+        "free_video_limit": auth_store.free_video_limit,
+    }
+
+
+@app.post("/auth/google", response_model=AuthSessionResponse)
+def auth_google(payload: GoogleAuthRequest) -> AuthSessionResponse:
+    try:
+        identity = verify_google_id_token(payload.id_token)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    user = auth_store.upsert_google_user(
+        email=identity.email,
+        google_sub=identity.subject,
+        name=identity.name,
+        picture_url=identity.picture_url,
+    )
+    session_token = auth_store.create_session(user.email)
+    usage = auth_store.get_usage(user.email)
+    return {
+        "session_token": session_token,
+        "user": _serialize_user(user),
+        "usage": usage.to_dict(),
+    }
+
+
+@app.post("/auth/logout")
+def auth_logout(
+    _: Annotated[UserProfile, Depends(_require_user)],
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+) -> dict[str, str]:
+    token = _extract_bearer_token(authorization)
+    auth_store.delete_session(token)
+    return {"status": "ok"}
+
+
+@app.get("/me", response_model=MeResponse)
+def me(current_user: Annotated[UserProfile, Depends(_require_user)]) -> MeResponse:
+    usage = auth_store.get_usage(current_user.email)
+    return {
+        "user": _serialize_user(current_user),
+        "usage": usage.to_dict(),
+    }
+
+
 @app.post("/detect/image", response_model=DetectionEnvelope)
-async def detect_image(request: Request, file: UploadFile = File(...)) -> DetectionEnvelope:
+async def detect_image(
+    request: Request,
+    current_user: Annotated[UserProfile, Depends(_require_user)],
+    file: UploadFile = File(...),
+) -> DetectionEnvelope:
     started = time.perf_counter()
     _check_rate_limit(request)
+    try:
+        auth_store.ensure_usage_available(current_user.email, "image")
+    except ValueError as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
     payload = await file.read()
     try:
         validate_upload_metadata(
@@ -217,6 +348,7 @@ async def detect_image(request: Request, file: UploadFile = File(...)) -> Detect
         report = image_detector.detect_pil(image)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    usage = auth_store.consume_usage(current_user.email, "image")
 
     return DetectionEnvelope(
         request_id=request.state.request_id,
@@ -226,13 +358,22 @@ async def detect_image(request: Request, file: UploadFile = File(...)) -> Detect
         media_type="image",
         model=image_detector.model_id,
         report=report.to_dict(),
+        usage=usage.to_dict(),
     )
 
 
 @app.post("/detect/video", response_model=DetectionEnvelope)
-async def detect_video(request: Request, file: UploadFile = File(...)) -> DetectionEnvelope:
+async def detect_video(
+    request: Request,
+    current_user: Annotated[UserProfile, Depends(_require_user)],
+    file: UploadFile = File(...),
+) -> DetectionEnvelope:
     started = time.perf_counter()
     _check_rate_limit(request)
+    try:
+        auth_store.ensure_usage_available(current_user.email, "video")
+    except ValueError as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
     payload = await file.read()
     try:
         validate_upload_metadata(
@@ -264,6 +405,7 @@ async def detect_video(request: Request, file: UploadFile = File(...)) -> Detect
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     finally:
         temp_path.unlink(missing_ok=True)
+    usage = auth_store.consume_usage(current_user.email, "video")
 
     return DetectionEnvelope(
         request_id=request.state.request_id,
@@ -273,6 +415,7 @@ async def detect_video(request: Request, file: UploadFile = File(...)) -> Detect
         media_type="video",
         model=video_detector.image_detector.model_id,
         report=report.to_dict(),
+        usage=usage.to_dict(),
     )
 
 
