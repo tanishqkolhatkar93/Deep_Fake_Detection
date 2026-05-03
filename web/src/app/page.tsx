@@ -3,6 +3,7 @@ import { ArrowRight, Radar, ShieldCheck, Sparkles, Workflow } from "lucide-react
 import { AccountPanel } from "@/components/auth/account-panel";
 import { Demo } from "@/components/demo";
 import { MediaScanner } from "@/components/sections/media-scanner";
+import { PricingGrid } from "@/components/sections/pricing-grid";
 
 const architectureCards = [
   {
@@ -60,6 +61,9 @@ export default function Home() {
               </a>
               <a className="transition hover:text-white" href="#architecture">
                 Architecture
+              </a>
+              <a className="transition hover:text-white" href="#pricing">
+                Pricing
               </a>
               <a className="transition hover:text-white" href="#trust">
                 Trust posture
@@ -214,6 +218,8 @@ export default function Home() {
             ))}
           </div>
         </section>
+
+        <PricingGrid />
 
         <section id="trust" className="mt-20 grid gap-6 lg:grid-cols-[0.52fr_0.48fr]">
           <div className="rounded-[2rem] border border-white/10 bg-white/6 p-6 backdrop-blur-xl">

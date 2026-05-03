@@ -7,7 +7,18 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/auth/auth-provider";
 
 export function AccountPanel() {
-  const { config, user, usage, isAuthenticated, isLoading, logout } = useAuth();
+  const {
+    billingConfig,
+    billingError,
+    config,
+    user,
+    usage,
+    isAuthenticated,
+    isBillingPending,
+    isLoading,
+    logout,
+    openBillingPortal,
+  } = useAuth();
 
   if (isLoading) {
     return (
@@ -75,18 +86,34 @@ export function AccountPanel() {
         <div className="text-sm text-white/58">
           Plan: <span className="font-medium text-white capitalize">{user.plan_name}</span>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            void logout();
-          }}
-          className="rounded-full border-white/15 bg-transparent text-white hover:bg-white/10"
-        >
-          <LogOut className="size-4" />
-          Log out
-        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {billingConfig?.enabled && user.plan_name !== "free" ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                void openBillingPortal();
+              }}
+              disabled={isBillingPending}
+              className="rounded-full border-white/15 bg-transparent text-white hover:bg-white/10"
+            >
+              Manage billing
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              void logout();
+            }}
+            className="rounded-full border-white/15 bg-transparent text-white hover:bg-white/10"
+          >
+            <LogOut className="size-4" />
+            Log out
+          </Button>
+        </div>
       </div>
+      {billingError ? <p className="text-sm text-red-200">{billingError}</p> : null}
     </div>
   );
 }

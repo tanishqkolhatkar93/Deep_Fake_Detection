@@ -41,6 +41,7 @@ VeriLens currently supports:
 - binary `Yes/No` verdicts with fake probability
 - Google sign-in backed by server-side session tokens
 - per-user monthly free-tier tracking for `10 images` and `3 videos`
+- hosted subscription checkout and plan upgrades through Lemon Squeezy
 - browser uploads through the public website
 - public API access through FastAPI
 
@@ -61,6 +62,7 @@ Deployment shape:
 3. The website posts uploads cross-origin to the API
 4. CORS, upload caps, duration caps, and rate limiting protect the demo runtime
 5. Google ID tokens are exchanged for local sessions, and monthly usage is tracked in SQLite
+6. Paid plans are sold through hosted Lemon Squeezy checkout and synced back by webhook
 
 ## Security guardrails
 
@@ -137,6 +139,14 @@ $env:VERILENS_DB_PATH="data/verilens.db"
 $env:FREE_TIER_IMAGE_LIMIT="10"
 $env:FREE_TIER_VIDEO_LIMIT="3"
 $env:SESSION_TTL_DAYS="30"
+$env:LEMON_SQUEEZY_API_KEY="your-lemon-squeezy-api-key"
+$env:LEMON_SQUEEZY_STORE_ID="your-store-id"
+$env:LEMON_SQUEEZY_WEBHOOK_SECRET="your-webhook-secret"
+$env:LEMON_STARTER_VARIANT_ID="111111"
+$env:LEMON_PRO_VARIANT_ID="222222"
+$env:LEMON_BUSINESS_VARIANT_ID="333333"
+$env:LEMON_SQUEEZY_REDIRECT_URL="https://tanishqkolhatkar93.github.io/Deep_Fake_Detection/"
+$env:LEMON_SQUEEZY_TEST_MODE="true"
 ```
 
 Google sign-in setup:
@@ -154,6 +164,15 @@ Usage tracking notes:
 - monthly counters are stored in SQLite at `VERILENS_DB_PATH`
 - free-tier defaults are `10` images and `3` videos per user per month
 - for real production, move this state to PostgreSQL or another managed database
+
+Billing setup notes:
+
+1. Create Lemon Squeezy product variants for `starter`, `pro`, and `business`
+2. Set the three `LEMON_*_VARIANT_ID` values on the API deployment
+3. Point the Lemon Squeezy webhook to:
+   - `https://tanishq93-deepfake-detection.hf.space/webhooks/lemonsqueezy`
+4. Set the same webhook signing secret as `LEMON_SQUEEZY_WEBHOOK_SECRET`
+5. Hosted checkout will then create subscriptions and the webhook will upgrade plan limits
 
 ## Free hosting rationale
 

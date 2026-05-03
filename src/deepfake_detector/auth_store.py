@@ -22,6 +22,10 @@ class UserProfile:
     plan_name: str
     image_limit: int
     video_limit: int
+    lemon_customer_id: str | None = None
+    lemon_subscription_id: str | None = None
+    lemon_variant_id: int | None = None
+    subscription_status: str | None = None
 
 
 @dataclass(frozen=True)
@@ -80,6 +84,10 @@ class AuthStore:
                     plan_name TEXT NOT NULL,
                     image_limit INTEGER NOT NULL,
                     video_limit INTEGER NOT NULL,
+                    lemon_customer_id TEXT,
+                    lemon_subscription_id TEXT,
+                    lemon_variant_id INTEGER,
+                    subscription_status TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -104,6 +112,27 @@ class AuthStore:
                 );
                 """
             )
+            self._ensure_user_columns(connection)
+
+    @staticmethod
+    def _ensure_user_columns(connection: sqlite3.Connection) -> None:
+        columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(users)").fetchall()
+        }
+        additions = {
+            "lemon_customer_id": "ALTER TABLE users ADD COLUMN lemon_customer_id TEXT",
+            "lemon_subscription_id": "ALTER TABLE users ADD COLUMN lemon_subscription_id TEXT",
+            "lemon_variant_id": "ALTER TABLE users ADD COLUMN lemon_variant_id INTEGER",
+            "subscription_status": "ALTER TABLE users ADD COLUMN subscription_status TEXT",
+        }
+        for column, statement in additions.items():
+            if column not in columns:
+                try:
+                    connection.execute(statement)
+                except sqlite3.OperationalError as exc:
+                    if "duplicate column name" not in str(exc).lower():
+                        raise
 
     @staticmethod
     def _now() -> datetime:
@@ -126,8 +155,22 @@ class AuthStore:
         with self._connect() as connection:
             connection.execute(
                 """
-                INSERT INTO users (email, google_sub, name, picture_url, plan_name, image_limit, video_limit, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO users (
+                    email,
+                    google_sub,
+                    name,
+                    picture_url,
+                    plan_name,
+                    image_limit,
+                    video_limit,
+                    lemon_customer_id,
+                    lemon_subscription_id,
+                    lemon_variant_id,
+                    subscription_status,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(email) DO UPDATE SET
                     google_sub = excluded.google_sub,
                     name = excluded.name,
@@ -142,6 +185,10 @@ class AuthStore:
                     "free",
                     self.free_image_limit,
                     self.free_video_limit,
+                    None,
+                    None,
+                    None,
+                    None,
                     now,
                     now,
                 ),
@@ -152,7 +199,18 @@ class AuthStore:
         with self._connect() as connection:
             row = connection.execute(
                 """
-                SELECT email, google_sub, name, picture_url, plan_name, image_limit, video_limit
+                SELECT
+                    email,
+                    google_sub,
+                    name,
+                    picture_url,
+                    plan_name,
+                    image_limit,
+                    video_limit,
+                    lemon_customer_id,
+                    lemon_subscription_id,
+                    lemon_variant_id,
+                    subscription_status
                 FROM users
                 WHERE email = ?
                 """,
@@ -168,6 +226,66 @@ class AuthStore:
             plan_name=row["plan_name"],
             image_limit=int(row["image_limit"]),
             video_limit=int(row["video_limit"]),
+            lemon_customer_id=row["lemon_customer_id"],
+            lemon_subscription_id=row["lemon_subscription_id"],
+            lemon_variant_id=int(row["lemon_variant_id"])
+            if row["lemon_variant_id"] is not None
+            else None,
+            subscription_status=row["subscription_status"],
+        )
+
+    def apply_plan(
+        self,
+        *,
+        email: str,
+        plan_name: str,
+        image_limit: int,
+        video_limit: int,
+        lemon_customer_id: str | None = None,
+        lemon_subscription_id: str | None = None,
+        lemon_variant_id: int | None = None,
+        subscription_status: str | None = None,
+    ) -> UserProfile:
+        now = self._now().isoformat()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE users
+                SET
+                    plan_name = ?,
+                    image_limit = ?,
+                    video_limit = ?,
+                    lemon_customer_id = ?,
+                    lemon_subscription_id = ?,
+                    lemon_variant_id = ?,
+                    subscription_status = ?,
+                    updated_at = ?
+                WHERE email = ?
+                """,
+                (
+                    plan_name,
+                    image_limit,
+                    video_limit,
+                    lemon_customer_id,
+                    lemon_subscription_id,
+                    lemon_variant_id,
+                    subscription_status,
+                    now,
+                    email.lower(),
+                ),
+            )
+        return self.get_user(email)
+
+    def reset_to_free_plan(self, email: str) -> UserProfile:
+        return self.apply_plan(
+            email=email,
+            plan_name="free",
+            image_limit=self.free_image_limit,
+            video_limit=self.free_video_limit,
+            lemon_customer_id=None,
+            lemon_subscription_id=None,
+            lemon_variant_id=None,
+            subscription_status=None,
         )
 
     def create_session(self, email: str) -> str:

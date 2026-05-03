@@ -27,6 +27,7 @@ export interface AuthUser {
   name: string;
   picture_url: string;
   plan_name: string;
+  subscription_status: string | null;
 }
 
 interface AuthConfig {
@@ -36,20 +37,42 @@ interface AuthConfig {
   free_video_limit: number;
 }
 
+export interface BillingPlan {
+  slug: string;
+  name: string;
+  price_label: string;
+  description: string;
+  image_limit: number;
+  video_limit: number;
+  featured: boolean;
+  checkout_available: boolean;
+}
+
+interface BillingConfig {
+  enabled: boolean;
+  provider: string;
+  plans: BillingPlan[];
+}
+
 interface AuthContextValue {
   apiBase: string;
   config: AuthConfig | null;
+  billingConfig: BillingConfig | null;
   user: AuthUser | null;
   usage: UsageSummary | null;
   sessionToken: string | null;
   isLoading: boolean;
   isAuthenticating: boolean;
+  isBillingPending: boolean;
   authError: string | null;
+  billingError: string | null;
   isAuthenticated: boolean;
   loginWithGoogleCredential: (credential: string) => Promise<void>;
   logout: () => Promise<void>;
   updateUsage: (usage: UsageSummary) => void;
   refreshSession: () => Promise<void>;
+  startCheckout: (planSlug: string) => Promise<void>;
+  openBillingPortal: () => Promise<void>;
 }
 
 interface AuthSessionResponse {
@@ -61,6 +84,10 @@ interface AuthSessionResponse {
 interface MeResponse {
   user: AuthUser;
   usage: UsageSummary;
+}
+
+interface BillingRedirectResponse {
+  url: string;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -97,12 +124,15 @@ async function parseApiError(response: Response): Promise<string> {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<AuthConfig | null>(null);
+  const [billingConfig, setBillingConfig] = useState<BillingConfig | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [isBillingPending, setIsBillingPending] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [billingError, setBillingError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,10 +141,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const configResponse = await fetch(`${API_BASE}/auth/config`);
         const configPayload = (await configResponse.json()) as AuthConfig;
+        const billingResponse = await fetch(`${API_BASE}/billing/config`);
+        const billingPayload = (await billingResponse.json()) as BillingConfig;
         if (cancelled) {
           return;
         }
         setConfig(configPayload);
+        setBillingConfig(billingPayload);
 
         const storedToken = readStoredToken();
         if (!storedToken) {
@@ -243,20 +276,88 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const startCheckout = async (planSlug: string) => {
+    const token = sessionToken ?? readStoredToken();
+    if (!token) {
+      throw new Error("Sign in before starting checkout.");
+    }
+
+    setBillingError(null);
+    setIsBillingPending(true);
+    try {
+      const response = await fetch(`${API_BASE}/billing/checkout`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ plan_slug: planSlug }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await parseApiError(response));
+      }
+
+      const payload = (await response.json()) as BillingRedirectResponse;
+      window.location.href = payload.url;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to start checkout.";
+      setBillingError(message);
+      throw error;
+    } finally {
+      setIsBillingPending(false);
+    }
+  };
+
+  const openBillingPortal = async () => {
+    const token = sessionToken ?? readStoredToken();
+    if (!token) {
+      throw new Error("Sign in before opening billing.");
+    }
+
+    setBillingError(null);
+    setIsBillingPending(true);
+    try {
+      const response = await fetch(`${API_BASE}/billing/portal`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(await parseApiError(response));
+      }
+
+      const payload = (await response.json()) as BillingRedirectResponse;
+      window.location.href = payload.url;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to open billing.";
+      setBillingError(message);
+      throw error;
+    } finally {
+      setIsBillingPending(false);
+    }
+  };
+
   const value: AuthContextValue = {
     apiBase: API_BASE,
     config,
+    billingConfig,
     user,
     usage,
     sessionToken,
     isLoading,
     isAuthenticating,
+    isBillingPending,
     authError,
+    billingError,
     isAuthenticated: Boolean(sessionToken && user),
     loginWithGoogleCredential,
     logout,
     updateUsage: setUsage,
     refreshSession,
+    startCheckout,
+    openBillingPortal,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

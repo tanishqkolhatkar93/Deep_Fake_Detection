@@ -21,7 +21,8 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from deepfake_detector.auth_store import AuthStore, UsageSnapshot, UserProfile
+from deepfake_detector.auth_store import AuthStore, UserProfile
+from deepfake_detector.billing import LemonSqueezyBilling
 from deepfake_detector.google_auth import google_auth_enabled, verify_google_id_token
 from deepfake_detector.image_detector import ImageDetector
 from deepfake_detector.security import (
@@ -125,6 +126,7 @@ class UserResponse(BaseModel):
     name: str
     picture_url: str
     plan_name: str
+    subscription_status: str | None
 
 
 class AuthSessionResponse(BaseModel):
@@ -136,6 +138,39 @@ class AuthSessionResponse(BaseModel):
 class MeResponse(BaseModel):
     user: UserResponse
     usage: dict[str, int | str]
+
+
+class BillingPlanResponse(BaseModel):
+    slug: str
+    name: str
+    price_label: str
+    description: str
+    image_limit: int
+    video_limit: int
+    featured: bool
+    checkout_available: bool
+
+
+class BillingConfigResponse(BaseModel):
+    enabled: bool
+    provider: str
+    plans: list[BillingPlanResponse]
+
+
+class BillingCheckoutRequest(BaseModel):
+    plan_slug: str
+
+
+class BillingRedirectResponse(BaseModel):
+    url: str
+
+
+class BillingPortalResponse(BaseModel):
+    url: str
+
+
+class BillingWebhookResponse(BaseModel):
+    status: str
 
 
 def _extract_bearer_token(authorization: str | None) -> str:
@@ -153,6 +188,7 @@ def _serialize_user(user: UserProfile) -> UserResponse:
         "name": user.name,
         "picture_url": user.picture_url,
         "plan_name": user.plan_name,
+        "subscription_status": user.subscription_status,
     }
 
 
@@ -189,6 +225,7 @@ video_detector = VideoDetector(image_detector=image_detector)
 upload_limits = UploadLimits()
 rate_limiter = InMemoryRateLimiter()
 auth_store = AuthStore()
+billing = LemonSqueezyBilling()
 
 
 @app.middleware("http")
@@ -225,6 +262,9 @@ def root() -> ServiceInfoResponse:
             "/auth/config",
             "/auth/google",
             "/me",
+            "/billing/config",
+            "/billing/checkout",
+            "/billing/portal",
             "/detect/image",
             "/detect/video",
         ],
@@ -274,6 +314,11 @@ def auth_config() -> AuthConfigResponse:
     }
 
 
+@app.get("/billing/config", response_model=BillingConfigResponse)
+def billing_config() -> BillingConfigResponse:
+    return billing.public_config()
+
+
 @app.post("/auth/google", response_model=AuthSessionResponse)
 def auth_google(payload: GoogleAuthRequest) -> AuthSessionResponse:
     try:
@@ -313,6 +358,144 @@ def me(current_user: Annotated[UserProfile, Depends(_require_user)]) -> MeRespon
         "user": _serialize_user(current_user),
         "usage": usage.to_dict(),
     }
+
+
+@app.post("/billing/checkout", response_model=BillingRedirectResponse)
+async def create_billing_checkout(
+    payload: BillingCheckoutRequest,
+    current_user: Annotated[UserProfile, Depends(_require_user)],
+) -> BillingRedirectResponse:
+    if current_user.lemon_subscription_id:
+        raise HTTPException(
+            status_code=409,
+            detail="You already have an active subscription. Use the billing portal to manage it.",
+        )
+    if payload.plan_slug == "free":
+        raise HTTPException(status_code=400, detail="The free plan does not require checkout.")
+
+    try:
+        plan = billing.get_plan(payload.plan_slug)
+        checkout_url = await billing.create_checkout_url(
+            plan=plan,
+            email=current_user.email,
+            name=current_user.name,
+            redirect_url=FRONTEND_URL,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception(
+            "billing_checkout_failed email=%s plan=%s",
+            current_user.email,
+            payload.plan_slug,
+        )
+        raise HTTPException(status_code=502, detail="Unable to start checkout right now.") from exc
+
+    return {"url": checkout_url}
+
+
+@app.get("/billing/portal", response_model=BillingPortalResponse)
+async def billing_portal(
+    current_user: Annotated[UserProfile, Depends(_require_user)],
+) -> BillingPortalResponse:
+    if not current_user.lemon_subscription_id:
+        raise HTTPException(
+            status_code=404,
+            detail="No paid subscription is linked to this account yet.",
+        )
+
+    try:
+        urls = await billing.fetch_subscription_urls(current_user.lemon_subscription_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception(
+            "billing_portal_failed email=%s subscription_id=%s",
+            current_user.email,
+            current_user.lemon_subscription_id,
+        )
+        raise HTTPException(status_code=502, detail="Unable to open the billing portal right now.") from exc
+
+    portal_url = (
+        urls.get("customer_portal_update_subscription")
+        or urls.get("customer_portal")
+        or urls.get("update_payment_method")
+    )
+    if not portal_url:
+        raise HTTPException(status_code=404, detail="No billing portal URL was available.")
+    return {"url": portal_url}
+
+
+@app.post("/webhooks/lemonsqueezy", response_model=BillingWebhookResponse)
+async def lemonsqueezy_webhook(
+    request: Request,
+    x_signature: Annotated[str | None, Header(alias="X-Signature")] = None,
+) -> BillingWebhookResponse:
+    payload = await request.body()
+    if not billing.verify_signature(payload, x_signature):
+        raise HTTPException(status_code=401, detail="Invalid webhook signature.")
+
+    event = await request.json()
+    resource = event.get("data") or event
+    attributes = resource.get("attributes") or {}
+    meta = event.get("meta") or {}
+    event_name = str(meta.get("event_name") or "").strip()
+    custom_data = meta.get("custom_data") or {}
+    user_email = (
+        str(custom_data.get("user_email") or "")
+        or str(attributes.get("user_email") or "")
+        or str(attributes.get("customer_email") or "")
+    ).strip().lower()
+    if not user_email:
+        logger.warning("billing_webhook_missing_email event=%s", event_name)
+        return {"status": "ignored"}
+
+    try:
+        current_user = auth_store.get_user(user_email)
+    except KeyError:
+        logger.warning("billing_webhook_unknown_user email=%s event=%s", user_email, event_name)
+        return {"status": "ignored"}
+
+    variant_id_raw = attributes.get("variant_id")
+    variant_id = int(variant_id_raw) if variant_id_raw is not None else None
+    plan = billing.plan_from_variant(variant_id)
+    subscription_status = str(attributes.get("status") or "").strip().lower() or None
+    resource_id = resource.get("id")
+    subscription_id = str(resource_id).strip() if resource_id is not None else None
+    customer_id = str(attributes.get("customer_id") or "").strip() or None
+
+    keep_paid_access = event_name not in {
+        "subscription_expired",
+        "subscription_refunded",
+    } and subscription_status not in {"expired"}
+
+    if plan and keep_paid_access:
+        auth_store.apply_plan(
+            email=current_user.email,
+            plan_name=plan.slug,
+            image_limit=plan.image_limit,
+            video_limit=plan.video_limit,
+            lemon_customer_id=customer_id,
+            lemon_subscription_id=subscription_id,
+            lemon_variant_id=variant_id,
+            subscription_status=subscription_status,
+        )
+    elif event_name in {
+        "subscription_expired",
+        "subscription_refunded",
+    } or subscription_status in {"expired"}:
+        auth_store.reset_to_free_plan(current_user.email)
+    else:
+        logger.info(
+            "billing_webhook_ignored email=%s event=%s variant_id=%s",
+            current_user.email,
+            event_name,
+            variant_id,
+        )
+
+    return {"status": "ok"}
 
 
 @app.post("/detect/image", response_model=DetectionEnvelope)
