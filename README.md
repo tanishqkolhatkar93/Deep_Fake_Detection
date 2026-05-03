@@ -1,12 +1,12 @@
 ---
 title: VeriLens Detection API
-colorFrom: orange
+colorFrom: red
 colorTo: gray
 sdk: docker
 app_port: 7860
 pinned: false
 license: mit
-short_description: Public inference API for detecting AI-generated images and short deepfake-style video.
+short_description: Public API for AI-image and short deepfake-video checks.
 tags:
   - fastapi
   - computer-vision
