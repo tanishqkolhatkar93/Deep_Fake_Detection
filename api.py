@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import time
@@ -12,6 +13,7 @@ from uuid import uuid4
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, UnidentifiedImageError
+from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
@@ -27,6 +29,12 @@ from deepfake_detector.security import (
     validate_video_file,
 )
 from deepfake_detector.video_detector import VideoDetector
+
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger("verilens.api")
 
 APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
 FRONTEND_URL = os.getenv(
@@ -45,6 +53,57 @@ ALLOWED_ORIGINS = [
     for origin in os.getenv("ALLOWED_ORIGINS", ",".join(DEFAULT_ALLOWED_ORIGINS)).split(",")
     if origin.strip()
 ]
+
+
+class ServiceInfoResponse(BaseModel):
+    service: str
+    version: str
+    frontend_url: str
+    docs: str
+    openapi: str
+    endpoints: list[str]
+
+
+class HealthResponse(BaseModel):
+    status: str
+
+
+class VersionResponse(BaseModel):
+    version: str
+
+
+class ModelMetadata(BaseModel):
+    name: str
+    threshold: float
+    positive_label: str
+    device: str
+
+
+class LimitsMetadata(BaseModel):
+    max_image_bytes: int
+    max_video_bytes: int
+    max_video_duration_seconds: float
+    rate_limit_max_requests: int
+    rate_limit_window_seconds: int
+
+
+class MetadataResponse(BaseModel):
+    service: str
+    version: str
+    frontend_url: str
+    model: ModelMetadata
+    limits: LimitsMetadata
+
+
+class DetectionEnvelope(BaseModel):
+    request_id: str
+    processed_at: str
+    processing_ms: float = Field(..., ge=0)
+    filename: str
+    media_type: str
+    model: str
+    report: dict[str, object]
+
 
 app = FastAPI(
     title="Media Authenticity Detector API",
@@ -75,30 +134,44 @@ async def add_request_context(request: Request, call_next):
     request.state.request_id = uuid4().hex
     started = time.perf_counter()
     response = await call_next(request)
+    duration_ms = (time.perf_counter() - started) * 1000
     response.headers["X-Request-ID"] = request.state.request_id
-    response.headers["X-Process-Time-MS"] = f"{(time.perf_counter() - started) * 1000:.2f}"
+    response.headers["X-Process-Time-MS"] = f"{duration_ms:.2f}"
+    logger.info(
+        "request_complete request_id=%s method=%s path=%s status=%s duration_ms=%.2f",
+        request.state.request_id,
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+    )
     return response
 
 
-@app.get("/")
-def root() -> dict[str, object]:
+@app.get("/", response_model=ServiceInfoResponse)
+def root() -> ServiceInfoResponse:
     return {
         "service": "media-authenticity-detector",
         "version": APP_VERSION,
         "frontend_url": FRONTEND_URL,
         "docs": "/docs",
         "openapi": "/openapi.json",
-        "endpoints": ["/health", "/metadata", "/detect/image", "/detect/video"],
+        "endpoints": ["/health", "/version", "/metadata", "/detect/image", "/detect/video"],
     }
 
 
-@app.get("/health")
-def health() -> dict[str, str]:
+@app.get("/health", response_model=HealthResponse)
+def health() -> HealthResponse:
     return {"status": "ok"}
 
 
-@app.get("/metadata")
-def metadata() -> dict[str, object]:
+@app.get("/version", response_model=VersionResponse)
+def version() -> VersionResponse:
+    return {"version": APP_VERSION}
+
+
+@app.get("/metadata", response_model=MetadataResponse)
+def metadata() -> MetadataResponse:
     return {
         "service": "media-authenticity-detector",
         "version": APP_VERSION,
@@ -119,8 +192,8 @@ def metadata() -> dict[str, object]:
     }
 
 
-@app.post("/detect/image")
-async def detect_image(request: Request, file: UploadFile = File(...)) -> dict[str, object]:
+@app.post("/detect/image", response_model=DetectionEnvelope)
+async def detect_image(request: Request, file: UploadFile = File(...)) -> DetectionEnvelope:
     started = time.perf_counter()
     _check_rate_limit(request)
     payload = await file.read()
@@ -145,19 +218,19 @@ async def detect_image(request: Request, file: UploadFile = File(...)) -> dict[s
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-    return {
-        "request_id": request.state.request_id,
-        "processed_at": datetime.now(UTC).isoformat(),
-        "processing_ms": round((time.perf_counter() - started) * 1000, 2),
-        "filename": file.filename or "upload",
-        "media_type": "image",
-        "model": image_detector.model_id,
-        "report": report.to_dict(),
-    }
+    return DetectionEnvelope(
+        request_id=request.state.request_id,
+        processed_at=datetime.now(UTC).isoformat(),
+        processing_ms=round((time.perf_counter() - started) * 1000, 2),
+        filename=file.filename or "upload",
+        media_type="image",
+        model=image_detector.model_id,
+        report=report.to_dict(),
+    )
 
 
-@app.post("/detect/video")
-async def detect_video(request: Request, file: UploadFile = File(...)) -> dict[str, object]:
+@app.post("/detect/video", response_model=DetectionEnvelope)
+async def detect_video(request: Request, file: UploadFile = File(...)) -> DetectionEnvelope:
     started = time.perf_counter()
     _check_rate_limit(request)
     payload = await file.read()
@@ -192,15 +265,15 @@ async def detect_video(request: Request, file: UploadFile = File(...)) -> dict[s
     finally:
         temp_path.unlink(missing_ok=True)
 
-    return {
-        "request_id": request.state.request_id,
-        "processed_at": datetime.now(UTC).isoformat(),
-        "processing_ms": round((time.perf_counter() - started) * 1000, 2),
-        "filename": file.filename or "upload",
-        "media_type": "video",
-        "model": video_detector.image_detector.model_id,
-        "report": report.to_dict(),
-    }
+    return DetectionEnvelope(
+        request_id=request.state.request_id,
+        processed_at=datetime.now(UTC).isoformat(),
+        processing_ms=round((time.perf_counter() - started) * 1000, 2),
+        filename=file.filename or "upload",
+        media_type="video",
+        model=video_detector.image_detector.model_id,
+        report=report.to_dict(),
+    )
 
 
 def _check_rate_limit(request: Request) -> None:

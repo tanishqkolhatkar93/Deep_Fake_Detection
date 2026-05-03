@@ -1,0 +1,35 @@
+name: uptime-smoke
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check website
+        run: curl --fail --silent --show-error https://tanishqkolhatkar93.github.io/Deep_Fake_Detection/ > /dev/null
+
+      - name: Check API health
+        run: curl --fail --silent --show-error https://tanishq93-deepfake-detection.hf.space/health > /dev/null
+
+      - name: Check API metadata
+        run: curl --fail --silent --show-error https://tanishq93-deepfake-detection.hf.space/metadata > /dev/null
+
+      - name: Smoke image inference
+        run: |
+          python - <<'PY'
+          import base64
+
+          png = base64.b64decode(
+              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO3Z4S8AAAAASUVORK5CYII="
+          )
+          with open("uptime.png", "wb") as fh:
+              fh.write(png)
+          PY
+          curl --fail --silent --show-error \
+            -F "file=@uptime.png;type=image/png" \
+            https://tanishq93-deepfake-detection.hf.space/detect/image > response.json
+          grep -q '"media_type":"image"' response.json

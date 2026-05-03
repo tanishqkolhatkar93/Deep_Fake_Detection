@@ -34,6 +34,12 @@ def test_metadata() -> None:
     assert "limits" in payload
 
 
+def test_version() -> None:
+    response = client.get("/version")
+    assert response.status_code == 200
+    assert "version" in response.json()
+
+
 def test_detect_image(monkeypatch) -> None:
     def fake_detect(_image):
         return ImageDetectionReport(

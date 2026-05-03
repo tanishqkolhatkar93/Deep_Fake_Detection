@@ -125,6 +125,13 @@ This repo intentionally uses a split deployment:
 
 That combination is more responsible than pretending Vercel/Netlify/Cloudflare can run this exact model-serving workload cleanly for free without architecture changes.
 
+## Operational docs
+
+- [System design](SYSTEM_DESIGN.md)
+- [Launch checklist](LAUNCH_CHECKLIST.md)
+- [Security policy](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
+
 ## Model
 
 - model source: `xRayon/convnext-ai-images-detector`
