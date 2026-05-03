@@ -1,0 +1,15 @@
+{
+  "name": "VeriLens",
+  "short_name": "VeriLens",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f7f3eb",
+  "theme_color": "#d95d39",
+  "icons": [
+    {
+      "src": "./assets/logo-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

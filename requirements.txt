@@ -5,7 +5,9 @@ Pillow
 streamlit
 fastapi
 huggingface-hub
+httpx
 python-multipart
+pytest
 scikit-learn
 timm
 torch

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import os
 import sys
+import time
+from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from uuid import uuid4
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, UnidentifiedImageError
 
 ROOT = Path(__file__).resolve().parent
@@ -23,13 +28,40 @@ from deepfake_detector.security import (
 )
 from deepfake_detector.video_detector import VideoDetector
 
+APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
+FRONTEND_URL = os.getenv(
+    "FRONTEND_URL", "https://tanishqkolhatkar93.github.io/Deep_Fake_Detection/"
+)
+DEFAULT_ALLOWED_ORIGINS = (
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "https://tanishqkolhatkar93.github.io",
+    "https://tanishq93-deepfake-detection.hf.space",
+)
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", ",".join(DEFAULT_ALLOWED_ORIGINS)).split(",")
+    if origin.strip()
+]
+
 app = FastAPI(
     title="Media Authenticity Detector API",
     description=(
         "HTTP service for binary Yes/No image and video checks using a local "
-        "xRayon checkpoint-based model."
+        "xRayon checkpoint-based model with hardened upload validation."
     ),
-    version="0.1.0",
+    version=APP_VERSION,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["X-Request-ID", "X-Process-Time-MS"],
 )
 
 image_detector = ImageDetector()
@@ -38,12 +70,25 @@ upload_limits = UploadLimits()
 rate_limiter = InMemoryRateLimiter()
 
 
+@app.middleware("http")
+async def add_request_context(request: Request, call_next):
+    request.state.request_id = uuid4().hex
+    started = time.perf_counter()
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request.state.request_id
+    response.headers["X-Process-Time-MS"] = f"{(time.perf_counter() - started) * 1000:.2f}"
+    return response
+
+
 @app.get("/")
 def root() -> dict[str, object]:
     return {
         "service": "media-authenticity-detector",
+        "version": APP_VERSION,
+        "frontend_url": FRONTEND_URL,
         "docs": "/docs",
-        "endpoints": ["/health", "/detect/image", "/detect/video"],
+        "openapi": "/openapi.json",
+        "endpoints": ["/health", "/metadata", "/detect/image", "/detect/video"],
     }
 
 
@@ -52,8 +97,31 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/metadata")
+def metadata() -> dict[str, object]:
+    return {
+        "service": "media-authenticity-detector",
+        "version": APP_VERSION,
+        "frontend_url": FRONTEND_URL,
+        "model": {
+            "name": image_detector.model_id,
+            "threshold": image_detector.threshold,
+            "positive_label": image_detector.fake_label,
+            "device": image_detector.device,
+        },
+        "limits": {
+            "max_image_bytes": upload_limits.max_image_bytes,
+            "max_video_bytes": upload_limits.max_video_bytes,
+            "max_video_duration_seconds": upload_limits.max_video_duration_seconds,
+            "rate_limit_max_requests": rate_limiter.max_requests,
+            "rate_limit_window_seconds": rate_limiter.window_seconds,
+        },
+    }
+
+
 @app.post("/detect/image")
 async def detect_image(request: Request, file: UploadFile = File(...)) -> dict[str, object]:
+    started = time.perf_counter()
     _check_rate_limit(request)
     payload = await file.read()
     try:
@@ -78,14 +146,19 @@ async def detect_image(request: Request, file: UploadFile = File(...)) -> dict[s
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     return {
+        "request_id": request.state.request_id,
+        "processed_at": datetime.now(UTC).isoformat(),
+        "processing_ms": round((time.perf_counter() - started) * 1000, 2),
         "filename": file.filename or "upload",
         "media_type": "image",
+        "model": image_detector.model_id,
         "report": report.to_dict(),
     }
 
 
 @app.post("/detect/video")
 async def detect_video(request: Request, file: UploadFile = File(...)) -> dict[str, object]:
+    started = time.perf_counter()
     _check_rate_limit(request)
     payload = await file.read()
     try:
@@ -120,8 +193,12 @@ async def detect_video(request: Request, file: UploadFile = File(...)) -> dict[s
         temp_path.unlink(missing_ok=True)
 
     return {
+        "request_id": request.state.request_id,
+        "processed_at": datetime.now(UTC).isoformat(),
+        "processing_ms": round((time.perf_counter() - started) * 1000, 2),
         "filename": file.filename or "upload",
         "media_type": "video",
+        "model": video_detector.image_detector.model_id,
         "report": report.to_dict(),
     }
 

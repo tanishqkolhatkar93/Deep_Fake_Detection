@@ -1,103 +1,136 @@
 ---
-title: Deepfake and AI-Generated Media Detector
-colorFrom: blue
+title: VeriLens Detection API
+colorFrom: orange
 colorTo: gray
 sdk: docker
-app_port: 8501
+app_port: 7860
 pinned: false
 license: mit
-short_description: Detect AI-generated and deepfake images/videos with xRayon.
+short_description: Public inference API for detecting AI-generated images and short deepfake-style video.
 tags:
+  - fastapi
   - computer-vision
   - deepfake-detection
-  - streamlit
-  - fastapi
+  - synthetic-media
 models:
   - xRayon/convnext-ai-images-detector
 ---
 
-# Deepfake and AI-Generated Media Detector
+# VeriLens
 
 [![CI](https://github.com/tanishqkolhatkar93/Deep_Fake_Detection/actions/workflows/ci.yml/badge.svg)](https://github.com/tanishqkolhatkar93/Deep_Fake_Detection/actions/workflows/ci.yml)
 
-This project is a demo app for detecting:
+VeriLens is a public-facing synthetic-media detector with two deployment surfaces:
 
-- AI-generated images
-- Deepfake-style or synthetic-looking video frames
+- `Website`: GitHub Pages static site for product UX, SEO, and browser uploads
+- `API`: Hugging Face Spaces Docker runtime serving FastAPI inference endpoints
 
-It uses a local stronger checkpoint-based model:
+Live URLs:
 
-- `xRayon/convnext-ai-images-detector`
+- Website: `https://tanishqkolhatkar93.github.io/Deep_Fake_Detection/`
+- API: `https://tanishq93-deepfake-detection.hf.space`
+- API docs: `https://tanishq93-deepfake-detection.hf.space/docs`
+- GitHub: `https://github.com/tanishqkolhatkar93/Deep_Fake_Detection`
 
-This Space is configured as a Docker app for Hugging Face Spaces. The xRayon checkpoint is downloaded automatically from Hugging Face during build or first run.
+## Product scope
 
-## What it does
+VeriLens currently supports:
 
-- Returns a simple `Yes` or `No` verdict
-- Uses the model's fake probability to drive the verdict
-- Samples frames from uploaded videos and aggregates frame-level predictions
-- Provides a Streamlit UI, CLI, and FastAPI service
+- image detection with a local xRayon checkpoint
+- short video detection by frame sampling and aggregation
+- binary `Yes/No` verdicts with fake probability
+- browser uploads through the public website
+- public API access through FastAPI
 
-## Limits
+This is a strong public demo baseline, not a claim of forensic certainty.
 
-This is a showcase detector, not a production-grade classifier.
+## Architecture
 
-- It requires `timm` and `torchvision`.
-- The checkpoint is much larger than the earlier CapCheck model.
-- Video detection is frame-based, so it can miss short manipulations.
-- Accuracy depends on the chosen model and threshold.
-- Upload validation is enforced:
-  - images up to 10 MB
-  - videos up to 60 MB
-  - videos up to 30 seconds
-- The FastAPI endpoints also apply a basic in-memory rate limit by client IP.
+- `site/`: static marketing and scanner website, deployed via GitHub Pages
+- `api.py`: FastAPI application for public inference
+- `app.py`: Streamlit local/admin demo surface
+- `src/deepfake_detector/`: model loading, video sampling, security validation, report types
+- `checkpoints/`: local model artifact location
 
-## Environment
+Deployment shape:
 
-Optional settings:
+1. GitHub Pages serves the public website and SEO surface
+2. Hugging Face Spaces serves the FastAPI inference API
+3. The website posts uploads cross-origin to the API
+4. CORS, upload caps, duration caps, and rate limiting protect the demo runtime
+
+## Security guardrails
+
+The public API enforces:
+
+- image uploads up to `10 MB`
+- video uploads up to `60 MB`
+- video duration up to `30 seconds`
+- MIME and extension validation
+- request IDs and processing time headers
+- basic in-memory rate limiting by client IP
+
+These controls are appropriate for a free public demo. A heavier production deployment should move to:
+
+- Redis-backed rate limiting
+- async video jobs
+- durable audit logging
+- object storage
+- a managed GPU/CPU runtime you control
+
+## Local development
+
+Install dependencies:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+Run the public API locally:
+
+```powershell
+python -m uvicorn api:app --reload
+```
+
+Run the Streamlit demo locally:
+
+```powershell
+python -m streamlit run app.py
+```
+
+Run tests:
+
+```powershell
+pytest
+```
+
+## Environment variables
+
+Optional runtime settings:
 
 ```powershell
 $env:HF_MODEL_ID="xRayon/convnext-ai-images-detector"
 $env:HF_FAKE_THRESHOLD="0.35"
 $env:HF_FAKE_LABEL="fake"
+$env:FRONTEND_URL="https://tanishqkolhatkar93.github.io/Deep_Fake_Detection/"
+$env:ALLOWED_ORIGINS="https://tanishqkolhatkar93.github.io,https://tanishq93-deepfake-detection.hf.space"
 ```
 
-## Run
+## Free hosting rationale
 
-```powershell
-python -m pip install -r requirements.txt
-python -m streamlit run app.py
-```
+This repo intentionally uses a split deployment:
 
-The checkpoint will be downloaded automatically if it is not already present locally.
+- GitHub Pages is a good free host for a static, SEO-friendly website
+- Hugging Face Spaces is a reasonable free host for model-backed API inference
 
-Source model:
+That combination is more responsible than pretending Vercel/Netlify/Cloudflare can run this exact model-serving workload cleanly for free without architecture changes.
 
-- https://huggingface.co/xRayon/convnext-ai-images-detector
+## Model
 
-CLI:
+- model source: `xRayon/convnext-ai-images-detector`
+- checkpoint: `checkpoint_phase2.pth`
+- architecture: `ConvNeXtV2`
 
-```powershell
-python detect.py path\to\image_or_video.mp4
-```
+Source:
 
-API:
-
-```powershell
-uvicorn api:app --reload
-```
-
-Then open:
-
-- `http://localhost:8501`
-- `http://127.0.0.1:8000/docs`
-
-## Project structure
-
-```text
-app.py
-api.py
-checkpoints/
-detect.py
-src/deepfake_detector/
-```
+- `https://huggingface.co/xRayon/convnext-ai-images-detector`

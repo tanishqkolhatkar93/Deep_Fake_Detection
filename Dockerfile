@@ -4,8 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PIP_NO_CACHE_DIR=1
 ENV HF_HOME=/app/.cache/huggingface
-ENV STREAMLIT_SERVER_PORT=8501
-ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
+ENV PORT=7860
 
 WORKDIR /app
 
@@ -39,6 +38,6 @@ if not target.exists():
 print(target)
 PY
 
-EXPOSE 8501
+EXPOSE 7860
 
-CMD ["python", "-m", "streamlit", "run", "app.py"]
+CMD ["python", "-m", "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "7860"]

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://tanishqkolhatkar93.github.io/Deep_Fake_Detection/sitemap.xml

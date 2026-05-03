@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VeriLens | AI Image & Deepfake Video Detector</title>
+    <meta
+      name="description"
+      content="VeriLens scans images and short videos for AI generation and deepfake risk using an xRayon-powered detection pipeline with a public API and fast browser uploads."
+    />
+    <meta
+      name="keywords"
+      content="deepfake detector, ai image detector, ai generated image checker, synthetic media detection, deepfake video detection, authenticity api"
+    />
+    <meta name="author" content="Tanishq Kolhatkar" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://tanishqkolhatkar93.github.io/Deep_Fake_Detection/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="VeriLens | AI Image & Deepfake Video Detector" />
+    <meta
+      property="og:description"
+      content="Public browser-based detection for AI-generated images and short-form manipulated video."
+    />
+    <meta
+      property="og:url"
+      content="https://tanishqkolhatkar93.github.io/Deep_Fake_Detection/"
+    />
+    <meta
+      property="og:image"
+      content="https://tanishqkolhatkar93.github.io/Deep_Fake_Detection/assets/og-preview.png"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="VeriLens | AI Image & Deepfake Video Detector" />
+    <meta
+      name="twitter:description"
+      content="Scan public images and short videos for synthetic or manipulated media risk."
+    />
+    <meta
+      name="twitter:image"
+      content="https://tanishqkolhatkar93.github.io/Deep_Fake_Detection/assets/og-preview.png"
+    />
+    <link rel="icon" href="./assets/logo-mark.svg" type="image/svg+xml" />
+    <link rel="manifest" href="./site.webmanifest" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "VeriLens",
+        "applicationCategory": "SecurityApplication",
+        "operatingSystem": "Web",
+        "url": "https://tanishqkolhatkar93.github.io/Deep_Fake_Detection/",
+        "description": "Browser-accessible detector for AI-generated images and deepfake-style short videos.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "creator": {
+          "@type": "Person",
+          "name": "Tanishq Kolhatkar"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <a class="brand" href="./">
+          <img src="./assets/logo-mark.svg" alt="" width="36" height="36" />
+          <span>VeriLens</span>
+        </a>
+        <nav class="nav">
+          <a href="#scanner">Scanner</a>
+          <a href="#workflow">Workflow</a>
+          <a href="#architecture">Architecture</a>
+          <a href="#faq">FAQ</a>
+        </nav>
+        <div class="nav-actions">
+          <a class="ghost-button" href="https://github.com/tanishqkolhatkar93/Deep_Fake_Detection" target="_blank" rel="noreferrer">GitHub</a>
+          <a class="solid-button" href="https://tanishq93-deepfake-detection.hf.space/docs" target="_blank" rel="noreferrer">API Docs</a>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero">
+          <div class="hero-copy">
+            <p class="eyebrow">Authenticity infrastructure for the synthetic-media era</p>
+            <h1>
+              Catch AI-generated images and deepfake-style video before they travel.
+            </h1>
+            <p class="hero-text">
+              VeriLens gives journalists, creators, and trust teams a public browser workflow
+              backed by an xRayon-powered detection API. Upload an image or short video and get a
+              binary verdict, confidence score, and model trace in seconds.
+            </p>
+            <div class="hero-actions">
+              <a class="solid-button" href="#scanner">Try Live Scanner</a>
+              <a class="ghost-button" href="#architecture">See System Design</a>
+            </div>
+            <div class="hero-metrics">
+              <div class="metric-chip">
+                <strong id="health-pill">Checking API...</strong>
+                <span>Live API status</span>
+              </div>
+              <div class="metric-chip">
+                <strong id="limit-pill">Loading limits...</strong>
+                <span>Runtime guardrails</span>
+              </div>
+              <div class="metric-chip">
+                <strong>xRayon</strong>
+                <span>ConvNeXtV2 checkpoint</span>
+              </div>
+            </div>
+          </div>
+
+          <aside class="hero-panel">
+            <div class="glass-card">
+              <p class="panel-kicker">Detection brief</p>
+              <div class="panel-stat">
+                <span>Public web scanner</span>
+                <strong>Images + short video</strong>
+              </div>
+              <div class="panel-stat">
+                <span>Verdict format</span>
+                <strong>Yes / No + probability</strong>
+              </div>
+              <div class="panel-stat">
+                <span>Deployment shape</span>
+                <strong>GitHub Pages + Hugging Face API</strong>
+              </div>
+              <p class="panel-note">
+                Built for public demos and lightweight trust workflows. The system uses hardened
+                upload validation, size caps, duration caps, and API rate limiting.
+              </p>
+            </div>
+          </aside>
+        </section>
+
+        <section class="trust-strip" aria-label="Use cases">
+          <span>Creator verification</span>
+          <span>Newsroom triage</span>
+          <span>Education demos</span>
+          <span>Moderation prototypes</span>
+          <span>Media authenticity research</span>
+        </section>
+
+        <section class="scanner-section" id="scanner">
+          <div class="section-heading">
+            <p class="eyebrow">Live scanner</p>
+            <h2>Upload media directly from the browser.</h2>
+            <p>
+              The browser talks to the public inference API. Keep uploads under the published
+              limits for reliable free-tier processing.
+            </p>
+          </div>
+
+          <div class="scanner-grid">
+            <div class="scanner-console">
+              <div class="tab-row" role="tablist" aria-label="Detection modes">
+                <button class="tab-button active" data-tab="image" type="button">Image scan</button>
+                <button class="tab-button" data-tab="video" type="button">Video scan</button>
+              </div>
+
+              <section class="tab-panel active" data-panel="image">
+                <form class="upload-form" data-media-type="image">
+                  <label class="dropzone">
+                    <input
+                      type="file"
+                      name="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      required
+                    />
+                    <span>Drop or choose a PNG, JPG, or WEBP image</span>
+                    <small>Best for screenshots, portraits, product shots, and synthetic edits.</small>
+                  </label>
+                  <button class="solid-button wide-button" type="submit">Analyze Image</button>
+                </form>
+              </section>
+
+              <section class="tab-panel" data-panel="video">
+                <form class="upload-form" data-media-type="video">
+                  <label class="dropzone">
+                    <input
+                      type="file"
+                      name="file"
+                      accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm"
+                      required
+                    />
+                    <span>Drop or choose a short MP4, MOV, AVI, MKV, or WEBM clip</span>
+                    <small>Short clips work best. The API samples frames and aggregates risk.</small>
+                  </label>
+                  <button class="solid-button wide-button" type="submit">Analyze Video</button>
+                </form>
+              </section>
+            </div>
+
+            <div class="result-shell">
+              <div class="result-card" id="result-card">
+                <p class="eyebrow">Live result</p>
+                <h3>Ready for a scan</h3>
+                <p id="result-summary">
+                  Upload a file to see the verdict, confidence score, processing time, and model
+                  evidence.
+                </p>
+                <div class="result-meta" id="result-meta">
+                  <span>API base: <code id="api-base"></code></span>
+                </div>
+                <div class="result-grid" id="result-grid"></div>
+                <div class="evidence-table" id="evidence-table"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="feature-grid">
+          <article class="feature-card">
+            <p class="eyebrow">Signal</p>
+            <h3>Binary verdict with a confidence trail</h3>
+            <p>
+              Public-facing output stays simple, but the underlying response includes probability,
+              per-frame video stats, request ID, and processing time for traceability.
+            </p>
+          </article>
+          <article class="feature-card">
+            <p class="eyebrow">Guardrails</p>
+            <h3>Responsible free hosting constraints</h3>
+            <p>
+              File-size caps, MIME validation, duration checks, and API rate limiting keep the
+              public demo usable without pretending free hosting is infinite infrastructure.
+            </p>
+          </article>
+          <article class="feature-card">
+            <p class="eyebrow">Rollout</p>
+            <h3>Separation of website and inference</h3>
+            <p>
+              GitHub Pages handles the marketing site and SEO. Hugging Face Spaces handles the
+              model-serving API. The architecture is simple, cheap, and easy to evolve.
+            </p>
+          </article>
+        </section>
+
+        <section class="workflow-section" id="workflow">
+          <div class="section-heading">
+            <p class="eyebrow">Workflow</p>
+            <h2>What happens after a user clicks upload?</h2>
+          </div>
+          <div class="workflow-steps">
+            <article>
+              <span>01</span>
+              <h3>Validate the payload</h3>
+              <p>
+                The API checks the file type, MIME, payload size, and video duration before any
+                inference work starts.
+              </p>
+            </article>
+            <article>
+              <span>02</span>
+              <h3>Run the detector</h3>
+              <p>
+                Images are scored directly. Videos are sampled frame by frame and aggregated into a
+                single final verdict.
+              </p>
+            </article>
+            <article>
+              <span>03</span>
+              <h3>Return an auditable response</h3>
+              <p>
+                The client receives the verdict, fake probability, model name, processing time, and
+                a request identifier for debugging.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="architecture-section" id="architecture">
+          <div class="section-heading">
+            <p class="eyebrow">System design</p>
+            <h2>Production-minded architecture, within free-tier reality.</h2>
+          </div>
+          <div class="architecture-grid">
+            <article class="architecture-card">
+              <h3>Presentation layer</h3>
+              <p>Static GitHub Pages site with SEO metadata, structured data, and direct API forms.</p>
+            </article>
+            <article class="architecture-card">
+              <h3>Inference layer</h3>
+              <p>FastAPI service on Hugging Face Spaces serving image and short-video detection.</p>
+            </article>
+            <article class="architecture-card">
+              <h3>Security layer</h3>
+              <p>MIME allowlists, size caps, duration limits, request IDs, and in-memory rate limiting.</p>
+            </article>
+            <article class="architecture-card">
+              <h3>Model layer</h3>
+              <p>xRayon ConvNeXtV2 checkpoint loaded locally inside the API runtime for deterministic inference.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="faq-section" id="faq">
+          <div class="section-heading">
+            <p class="eyebrow">FAQ</p>
+            <h2>Direct answers for public users.</h2>
+          </div>
+          <div class="faq-list">
+            <details open>
+              <summary>Is this perfect proof that media is fake?</summary>
+              <p>
+                No. VeriLens is a detection aid. It should be used alongside source checks,
+                metadata review, reverse image search, and context verification.
+              </p>
+            </details>
+            <details>
+              <summary>Why are uploads capped?</summary>
+              <p>
+                Free hosting has real limits. The caps keep the public demo stable and reduce abuse.
+              </p>
+            </details>
+            <details>
+              <summary>Why do videos take longer than images?</summary>
+              <p>
+                Videos are decoded, sampled across multiple frames, and then aggregated into a final
+                score. That is inherently heavier than a single image pass.
+              </p>
+            </details>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div>
+          <strong>VeriLens</strong>
+          <p>Public-facing authenticity scanning for the age of synthetic media.</p>
+        </div>
+        <div class="footer-links">
+          <a href="./privacy.html">Privacy</a>
+          <a href="https://tanishq93-deepfake-detection.hf.space/docs" target="_blank" rel="noreferrer">API Docs</a>
+          <a href="https://github.com/tanishqkolhatkar93/Deep_Fake_Detection" target="_blank" rel="noreferrer">Source</a>
+        </div>
+      </footer>
+    </div>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

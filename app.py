@@ -19,13 +19,13 @@ from deepfake_detector.video_detector import VideoDetector
 
 
 st.set_page_config(
-    page_title="Media Authenticity Detector",
-    page_icon="AI",
+    page_title="VeriLens Admin Console",
+    page_icon="V",
     layout="wide",
 )
 
-st.title("Media Authenticity Detector")
-st.caption("Local xRayon detector for binary Yes/No checks on images and videos.")
+st.title("VeriLens Admin Console")
+st.caption("Local xRayon detector for internal image and video authenticity checks.")
 
 detector = ImageDetector()
 video_detector = VideoDetector(image_detector=detector)
