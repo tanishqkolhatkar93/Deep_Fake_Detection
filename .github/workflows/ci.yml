@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Compile sources
+        run: python -m compileall src app.py api.py detect.py
+
+      - name: Import smoke test
+        run: |
+          python - <<'PY'
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, str(Path("src").resolve()))
+          from deepfake_detector.image_detector import ImageDetector
+          from deepfake_detector.video_detector import VideoDetector
+          detector = ImageDetector()
+          video_detector = VideoDetector(image_detector=detector)
+          print(detector.model_id)
+          print(video_detector.max_frames)
+          PY

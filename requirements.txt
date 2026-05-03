@@ -1,0 +1,13 @@
+numpy
+pandas
+opencv-python
+Pillow
+streamlit
+fastapi
+huggingface-hub
+python-multipart
+scikit-learn
+timm
+torch
+transformers
+uvicorn
