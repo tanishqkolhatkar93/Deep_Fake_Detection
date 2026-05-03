@@ -1,5 +1,7 @@
 # Deepfake and AI-Generated Media Detector
 
+[![CI](https://github.com/tanishqkolhatkar93/Deep_Fake_Detection/actions/workflows/ci.yml/badge.svg)](https://github.com/tanishqkolhatkar93/Deep_Fake_Detection/actions/workflows/ci.yml)
+
 This project is a demo app for detecting:
 
 - AI-generated images
