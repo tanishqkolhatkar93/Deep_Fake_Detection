@@ -65,7 +65,7 @@ The public API enforces:
 
 - image uploads up to `10 MB`
 - video uploads up to `60 MB`
-- video duration up to `30 seconds`
+- video duration up to `60 seconds`
 - MIME and extension validation
 - request IDs and processing time headers
 - basic in-memory rate limiting by client IP

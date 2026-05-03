@@ -73,7 +73,7 @@ def test_video_duration_falls_back_to_frame_probe(monkeypatch) -> None:
 
     duration = validate_video_file("sample.mp4")
     assert duration > 0
-    assert duration <= 30.0
+    assert duration <= 60.0
 
 
 def test_video_duration_probe_still_rejects_long_video(monkeypatch) -> None:
